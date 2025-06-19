@@ -1,77 +1,5 @@
 # Orchestrator AWS Setup Documentation
 
-# 5. General Information and Environment Variables
-
-This document outlines the AWS resource provisioning process performed by the orchestrator's `setup` command. The setup is sequential, and certain resources depend on the prior creation and readiness of others.
-
-**Key Environment Variables:**
-
-The following environment variables are crucial for configuring the AWS resource setup:
-
-*   `MADARA_ORCHESTRATOR_AWS_PREFIX`:
-    *   **Description:** A prefix string that will be added to the names of most AWS resources created by the orchestrator. This helps in namespacing and identifying resources belonging to a specific deployment.
-    *   **Example:** `mo`
-
-*   `MADARA_ORCHESTRATOR_AWS_S3_BUCKET_IDENTIFIER`:
-    *   **Description:** Specifies the base name or ARN for the S3 bucket used for storage.
-    *   **Example (Name):** `test-bucket` (results in `mo-test-bucket` if prefix is `mo`)
-    *   **Example (ARN):** `arn:aws:s3:::my-specific-bucket` (prefix is ignored)
-    *   **Default (from code):** `mo-bucket` (this is the CLI default, if the env var is not set, this base name is used, and the prefix applies if present)
-
-*   `MADARA_ORCHESTRATOR_AWS_SQS_QUEUE_IDENTIFIER`:
-    *   **Description:** A template string for naming SQS queues. The `{}` placeholder will be replaced with specific queue types (e.g., `WorkerTrigger`, `BatchingQueue`).
-    *   **Example (Name Template):** `test_{}_queue` (results in `mo_test_WorkerTrigger_queue` for the WorkerTrigger queue if prefix is `mo`)
-    *   **Example (ARN Template):** `arn:aws:sqs:us-east-1:123456789012:my_base_queue_{}` (prefix is ignored, but type substitution still occurs on the resource part)
-    *   **Default (from code):** `mo_{}_queue` (CLI default, prefix applies if present)
-
-*   `MADARA_ORCHESTRATOR_AWS_SNS_TOPIC_IDENTIFIER`:
-    *   **Description:** Specifies the base name or ARN for the SNS topic used for alerts/notifications.
-    *   **Example (Name):** `test` (results in `mo_test` if prefix is `mo`)
-    *   **Example (ARN):** `arn:aws:sns:us-east-1:123456789012:my-specific-topic` (prefix is ignored)
-    *   **Default (from code):** `alerts` (CLI default, prefix applies if present)
-
-*   `MADARA_ORCHESTRATOR_EVENT_BRIDGE_TYPE`:
-    *   **Description:** Determines whether to use EventBridge Rules or EventBridge Scheduler for cron-like job triggers.
-    *   **Possible Values:** `Rule`, `Schedule`
-    *   **Default:** Not explicitly defaulted in `AWSEventBridgeCliArgs` parsing, so it must be provided if `aws_event_bridge` is true. The `SetupCmd` makes it a required group.
-
-*   `MADARA_ORCHESTRATOR_EVENT_BRIDGE_INTERVAL_SECONDS`:
-    *   **Description:** The interval in seconds at which the EventBridge rules/schedules will trigger. This is converted into a rate expression (e.g., 60 seconds becomes `rate(1 minute)`).
-    *   **Default:** `60`
-
-**AWS SDK Environment Variables:**
-
-The orchestrator uses the standard AWS SDK for Rust. Therefore, AWS credentials and region configuration are typically handled by the SDK using environment variables like:
-
-*   `AWS_ACCESS_KEY_ID`: Your AWS access key.
-*   `AWS_SECRET_ACCESS_KEY`: Your AWS secret key.
-*   `AWS_SESSION_TOKEN` (if using temporary credentials).
-*   `AWS_REGION`: The AWS region where resources should be provisioned (e.g., `us-east-1`). This is important for services that are region-specific.
-*   Alternatively, configuration can be managed via shared AWS configuration files (`~/.aws/config` and `~/.aws/credentials`).
-
-**Setup Command Miscellaneous Arguments:**
-
-The `setup` command also accepts the following arguments (which can be set via environment variables):
-
-*   `MADARA_ORCHESTRATOR_SETUP_TIMEOUT` (`--timeout`):
-    *   **Description:** The maximum time (in seconds) to wait for certain resources (like SQS queues) to become ready during setup polling.
-    *   **Default:** `300` seconds.
-
-*   `MADARA_ORCHESTRATOR_SETUP_RESOURCE_POLL_INTERVAL` (`--poll-interval`):
-    *   **Description:** The interval (in seconds) at which the system polls for resource readiness during setup.
-    *   **Default:** `5` seconds.
-
-**Resource Naming Summary:**
-
-*   **S3 Buckets:** `{PREFIX}-{BUCKET_IDENTIFIER}`
-*   **SQS Queues:** `{PREFIX}_{QUEUE_IDENTIFIER_TEMPLATE_BASE}_{QUEUE_TYPE}_queue` (assuming template includes `{}_queue`)
-*   **SNS Topics:** `{PREFIX}_{TOPIC_IDENTIFIER}`
-*   **EventBridge Role:** `{PREFIX}-mo-wt-role-{RANDOM_ID}`
-*   **EventBridge Policy:** `{PREFIX}-mo-wt-policy-{RANDOM_ID}`
-*   **EventBridge Rule/Schedule:** `{PREFIX}-mo-wt-rule-{TRIGGER_TYPE}`
-
-*(If `MADARA_ORCHESTRATOR_AWS_PREFIX` is not set, the `{PREFIX}-` or `{PREFIX}_` part is omitted from the names.)*
-
 
 # 1. S3 Bucket Setup
 
@@ -210,3 +138,77 @@ The `setup` command also accepts the following arguments (which can be set via e
     *   If the topic does not exist and a name was provided (not an ARN), a new SNS topic is created with that name. If an ARN was provided, and it didn't exist, this would typically result in an error earlier, but the code path primarily focuses on creation via name if it's not found by ARN.
 *   **Topic Policies:**
     *   The orchestrator's setup process, as analyzed for this specific documentation task, does not create or attach any custom SNS topic policies (e.g., access policies defining who can publish or subscribe). The topic will be created with default AWS SNS permissions and settings. Any necessary subscriptions or specific access controls would need to be configured separately after this initial setup.
+
+# 5. General Information and Environment Variables
+
+This document outlines the AWS resource provisioning process performed by the orchestrator's `setup` command. The setup is sequential, and certain resources depend on the prior creation and readiness of others.
+
+**Key Environment Variables:**
+
+The following environment variables are crucial for configuring the AWS resource setup:
+
+*   `MADARA_ORCHESTRATOR_AWS_PREFIX`:
+    *   **Description:** A prefix string that will be added to the names of most AWS resources created by the orchestrator. This helps in namespacing and identifying resources belonging to a specific deployment.
+    *   **Example:** `mo`
+
+*   `MADARA_ORCHESTRATOR_AWS_S3_BUCKET_IDENTIFIER`:
+    *   **Description:** Specifies the base name or ARN for the S3 bucket used for storage.
+    *   **Example (Name):** `test-bucket` (results in `mo-test-bucket` if prefix is `mo`)
+    *   **Example (ARN):** `arn:aws:s3:::my-specific-bucket` (prefix is ignored)
+    *   **Default (from code):** `mo-bucket` (this is the CLI default, if the env var is not set, this base name is used, and the prefix applies if present)
+
+*   `MADARA_ORCHESTRATOR_AWS_SQS_QUEUE_IDENTIFIER`:
+    *   **Description:** A template string for naming SQS queues. The `{}` placeholder will be replaced with specific queue types (e.g., `WorkerTrigger`, `BatchingQueue`).
+    *   **Example (Name Template):** `test_{}_queue` (results in `mo_test_WorkerTrigger_queue` for the WorkerTrigger queue if prefix is `mo`)
+    *   **Example (ARN Template):** `arn:aws:sqs:us-east-1:123456789012:my_base_queue_{}` (prefix is ignored, but type substitution still occurs on the resource part)
+    *   **Default (from code):** `mo_{}_queue` (CLI default, prefix applies if present)
+
+*   `MADARA_ORCHESTRATOR_AWS_SNS_TOPIC_IDENTIFIER`:
+    *   **Description:** Specifies the base name or ARN for the SNS topic used for alerts/notifications.
+    *   **Example (Name):** `test` (results in `mo_test` if prefix is `mo`)
+    *   **Example (ARN):** `arn:aws:sns:us-east-1:123456789012:my-specific-topic` (prefix is ignored)
+    *   **Default (from code):** `alerts` (CLI default, prefix applies if present)
+
+*   `MADARA_ORCHESTRATOR_EVENT_BRIDGE_TYPE`:
+    *   **Description:** Determines whether to use EventBridge Rules or EventBridge Scheduler for cron-like job triggers.
+    *   **Possible Values:** `Rule`, `Schedule`
+    *   **Default:** Not explicitly defaulted in `AWSEventBridgeCliArgs` parsing, so it must be provided if `aws_event_bridge` is true. The `SetupCmd` makes it a required group.
+
+*   `MADARA_ORCHESTRATOR_EVENT_BRIDGE_INTERVAL_SECONDS`:
+    *   **Description:** The interval in seconds at which the EventBridge rules/schedules will trigger. This is converted into a rate expression (e.g., 60 seconds becomes `rate(1 minute)`).
+    *   **Default:** `60`
+
+**AWS SDK Environment Variables:**
+
+The orchestrator uses the standard AWS SDK for Rust. Therefore, AWS credentials and region configuration are typically handled by the SDK using environment variables like:
+
+*   `AWS_ACCESS_KEY_ID`: Your AWS access key.
+*   `AWS_SECRET_ACCESS_KEY`: Your AWS secret key.
+*   `AWS_SESSION_TOKEN` (if using temporary credentials).
+*   `AWS_REGION`: The AWS region where resources should be provisioned (e.g., `us-east-1`). This is important for services that are region-specific.
+*   Alternatively, configuration can be managed via shared AWS configuration files (`~/.aws/config` and `~/.aws/credentials`).
+
+**Setup Command Miscellaneous Arguments:**
+
+The `setup` command also accepts the following arguments (which can be set via environment variables):
+
+*   `MADARA_ORCHESTRATOR_SETUP_TIMEOUT` (`--timeout`):
+    *   **Description:** The maximum time (in seconds) to wait for certain resources (like SQS queues) to become ready during setup polling.
+    *   **Default:** `300` seconds.
+
+*   `MADARA_ORCHESTRATOR_SETUP_RESOURCE_POLL_INTERVAL` (`--poll-interval`):
+    *   **Description:** The interval (in seconds) at which the system polls for resource readiness during setup.
+    *   **Default:** `5` seconds.
+
+**Resource Naming Summary:**
+
+*   **S3 Buckets:** `{PREFIX}-{BUCKET_IDENTIFIER}`
+*   **SQS Queues:** `{PREFIX}_{QUEUE_IDENTIFIER_TEMPLATE_BASE}_{QUEUE_TYPE}_queue` (assuming template includes `{}_queue`)
+*   **SNS Topics:** `{PREFIX}_{TOPIC_IDENTIFIER}`
+*   **EventBridge Role:** `{PREFIX}-mo-wt-role-{RANDOM_ID}`
+*   **EventBridge Policy:** `{PREFIX}-mo-wt-policy-{RANDOM_ID}`
+*   **EventBridge Rule/Schedule:** `{PREFIX}-mo-wt-rule-{TRIGGER_TYPE}`
+
+*(If `MADARA_ORCHESTRATOR_AWS_PREFIX` is not set, the `{PREFIX}-` or `{PREFIX}_` part is omitted from the names.)*
+
+
