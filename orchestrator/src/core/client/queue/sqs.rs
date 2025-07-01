@@ -195,6 +195,7 @@ impl QueueClient for SQS {
     /// The consumer is used to receive messages from the queue.
     async fn get_consumer(&self, queue: QueueType) -> Result<SqsConsumer, QueueError> {
         let queue_name = self.get_queue_name(&queue)?;
+        println!("Getting consumer for queue: {}", queue_name);
         let queue_url = self.inner.get_queue_url_from_client(queue_name.as_str()).await?;
         let consumer =
             SqsBackend::builder(SqsConfig { queue_dsn: queue_url, override_endpoint: true }).build_consumer().await?;

@@ -47,7 +47,8 @@ async fn handle_process_job_request(
             ORCHESTRATOR_METRICS
                 .successful_job_operations
                 .add(1.0, &[KeyValue::new("operation_type", "queue_process")]);
-            Ok(Json(ApiResponse::success(Some(format!("Job with id {} queued for processing", id)))).into_response())
+            Ok(Json(ApiResponse::<()>::success(Some(format!("Job with id {} queued for processing", id))))
+                .into_response())
         }
         Err(e) => {
             error!(error = %e, "Failed to queue job for processing");
@@ -87,7 +88,8 @@ async fn handle_verify_job_request(
         Ok(_) => {
             info!("Job queued for verification successfully");
             ORCHESTRATOR_METRICS.successful_job_operations.add(1.0, &[KeyValue::new("operation_type", "queue_verify")]);
-            Ok(Json(ApiResponse::success(Some(format!("Job with id {} queued for verification", id)))).into_response())
+            Ok(Json(ApiResponse::<()>::success(Some(format!("Job with id {} queued for verification", id))))
+                .into_response())
         }
         Err(e) => {
             error!(error = %e, "Failed to queue job for verification");
@@ -130,7 +132,7 @@ async fn handle_retry_job_request(
                 &[KeyValue::new("operation_type", "process_job"), KeyValue::new("operation_info", "retry_job")],
             );
 
-            Ok(Json(ApiResponse::success(Some(format!("Job with id {} retry initiated", id)))).into_response())
+            Ok(Json(ApiResponse::<()>::success(Some(format!("Job with id {} retry initiated", id)))).into_response())
         }
         Err(e) => {
             error!(error = %e, "Failed to retry job");
@@ -173,7 +175,7 @@ pub fn job_router(config: Arc<Config>) -> Router {
 async fn handle_get_job_status_by_block_request(
     Path(block_number): Path<u64>,
     State(config): State<Arc<Config>>,
-) -> JobRouteResult<BlockJobStatusResponse> {
+) -> JobRouteResult {
     match config.database().get_jobs_by_block_number(block_number).await {
         Ok(jobs) => {
             let mut job_status_items = Vec::new();
@@ -182,7 +184,7 @@ async fn handle_get_job_status_by_block_request(
                 job_status_items.push(JobStatusResponseItem { job_type: job.job_type, id: job.id, status: job.status });
             }
             info!(count = job_status_items.len(), "Successfully fetched job statuses for block");
-            Ok(Json(ApiResponse::success_with_data(
+            Ok(Json(ApiResponse::<BlockJobStatusResponse>::success_with_data(
                 BlockJobStatusResponse { jobs: job_status_items },
                 Some(format!("Successfully fetched job statuses for block {}", block_number)),
             ))

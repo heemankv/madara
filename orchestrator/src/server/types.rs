@@ -115,7 +115,7 @@ impl<T> ApiResponse<T> {
 ///     Err(JobRouteError::NotFound("123".to_string()))
 /// }
 /// ```
-pub type JobRouteResult<T = ()> = Result<Response<T>, JobRouteError>;
+pub type JobRouteResult = Result<Response<axum::body::Body>, JobRouteError>;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct JobStatusResponseItem {

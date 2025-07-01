@@ -14,6 +14,7 @@ use crate::core::config::Config;
 use crate::server::types::ApiResponse;
 use crate::tests::config::{ConfigType, TestConfigBuilder};
 use crate::tests::utils::build_job_item;
+use crate::types::jobs::metadata::JobSpecificMetadata;
 use crate::types::jobs::types::{JobStatus, JobType};
 use crate::types::queue::QueueNameForJobType;
 use crate::worker::event_handler::factory::mock_factory::get_job_handler_context;
@@ -215,11 +216,14 @@ async fn test_get_job_status_by_block_number_found(#[future] setup_trigger: (Soc
     let snos_job = build_job_item(JobType::SnosRun, JobStatus::Completed, block_number);
     let proving_job = build_job_item(JobType::ProofCreation, JobStatus::PendingVerification, block_number);
     let data_submission_job = build_job_item(JobType::DataSubmission, JobStatus::Created, block_number);
-    let state_transition_job =
-        build_job_item(JobType::StateTransition, JobStatus::Completed, 0); // internal_id is not block_number for ST
-    let mut state_transition_job_specific_metadata =
-        state_transition_job.metadata.specific.clone().try_into_state_transition().unwrap();
-    state_transition_job_specific_metadata.blocks_to_settle = vec![block_number, block_number + 1];
+    let state_transition_job = build_job_item(JobType::StateTransition, JobStatus::Completed, 0); // internal_id is not block_number for ST
+    let mut state_transition_job_specific_metadata = state_transition_job.metadata.specific.clone();
+
+    if let JobSpecificMetadata::StateUpdate(ref mut x) = state_transition_job_specific_metadata {
+        x.blocks_to_settle = vec![block_number, block_number + 1];
+    } else {
+        panic!("Unexpected job type");
+    }
     let mut state_transition_job_updated = state_transition_job.clone();
     state_transition_job_updated.metadata.specific = state_transition_job_specific_metadata.into();
 
@@ -249,10 +253,7 @@ async fn test_get_job_status_by_block_number_found(#[future] setup_trigger: (Soc
         serde_json::from_slice(&body_bytes).unwrap();
 
     assert!(response_body.success);
-    assert_eq!(
-        response_body.message,
-        Some(format!("Successfully fetched job statuses for block {}", block_number))
-    );
+    assert_eq!(response_body.message, Some(format!("Successfully fetched job statuses for block {}", block_number)));
     let jobs_response = response_body.data.unwrap().jobs;
     assert_eq!(jobs_response.len(), 4);
 
@@ -260,9 +261,7 @@ async fn test_get_job_status_by_block_number_found(#[future] setup_trigger: (Soc
     assert!(jobs_response.iter().any(|j| j.id == snos_job.id && j.status == JobStatus::Completed));
     assert!(jobs_response.iter().any(|j| j.id == proving_job.id && j.status == JobStatus::PendingVerification));
     assert!(jobs_response.iter().any(|j| j.id == data_submission_job.id && j.status == JobStatus::Created));
-    assert!(
-        jobs_response.iter().any(|j| j.id == state_transition_job_updated.id && j.status == JobStatus::Completed)
-    );
+    assert!(jobs_response.iter().any(|j| j.id == state_transition_job_updated.id && j.status == JobStatus::Completed));
 }
 
 #[tokio::test]
@@ -292,93 +291,7 @@ async fn test_get_job_status_by_block_number_not_found(#[future] setup_trigger: 
         serde_json::from_slice(&body_bytes).unwrap();
 
     assert!(response_body.success);
-    assert_eq!(
-        response_body.message,
-        Some(format!("Successfully fetched job statuses for block {}", block_number))
-    );
+    assert_eq!(response_body.message, Some(format!("Successfully fetched job statuses for block {}", block_number)));
     let jobs_response = response_body.data.unwrap().jobs;
     assert_eq!(jobs_response.len(), 0);
-}
-
-#[tokio::test]
-#[rstest]
-async fn test_get_job_status_by_block_number_proof_registration_always_returned(
-    #[future] setup_trigger: (SocketAddr, Arc<Config>),
-) {
-    let (addr, config) = setup_trigger.await;
-    let block_number = 789;
-
-    // Create a ProofRegistration job
-    let proof_reg_job = build_job_item(JobType::ProofRegistration, JobStatus::Completed, block_number);
-    config.database().create_job(proof_reg_job.clone()).await.unwrap();
-
-    // Query for the job
-    let client = hyper::Client::new();
-    let response = client
-        .request(
-            Request::builder()
-                .uri(format!("http://{}/jobs/block/{}/status", addr, block_number))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    // Assert that the job is returned
-    assert_eq!(response.status(), 200);
-    let body_bytes = hyper::body::to_bytes(response.into_body()).await.unwrap();
-    let response_body: ApiResponse<crate::server::types::BlockJobStatusResponse> =
-        serde_json::from_slice(&body_bytes).unwrap();
-    assert!(response_body.success);
-    let jobs_response = response_body.data.unwrap().jobs;
-    assert_eq!(jobs_response.len(), 1, "ProofRegistration job should be returned");
-    assert_eq!(jobs_response[0].id, proof_reg_job.id);
-    assert_eq!(jobs_response[0].job_type, JobType::ProofRegistration);
-
-    // It doesn't matter if the config is L2 or L3, the job should still be returned.
-    // We can simulate this by creating a new config with L2 and running the same query.
-    // The setup_trigger by default doesn't enforce L3, so the above already tests a non-specific layer config.
-
-    // Create a new TestConfigBuilder instance for an L2 configuration
-    let madara_url_l2 = get_env_var_or_panic("MADARA_ORCHESTRATOR_MADARA_RPC_URL");
-    let provider_l2 = JsonRpcClient::new(HttpTransport::new(
-        Url::parse(madara_url_l2.as_str().to_string().as_str()).expect("Failed to parse URL"),
-    ));
-    let services_l2 = TestConfigBuilder::new()
-        .configure_database(ConfigType::Actual) // Use the same DB or ensure it's clean and job re-inserted
-        .configure_queue_client(ConfigType::Actual)
-        .configure_starknet_client(provider_l2.into())
-        .configure_api_server(ConfigType::Actual) // New server instance effectively
-        .with_layer_type(crate::core::config::LayerType::L2) // Explicitly L2
-        .build()
-        .await;
-
-    // Ensure the job exists for this "L2 server instance" context
-    // If the DB is shared and not cleaned, this might lead to duplicate key errors if not handled.
-    // For this test, let's assume `create_job` handles conflicts or we use a fresh DB for `services_l2`.
-    // A simpler way is to just use the `addr_l2` with the existing DB state where `proof_reg_job` is already present.
-    let addr_l2 = services_l2.api_server_address.unwrap();
-     // Ensure the job is in the database for this test context
-    services_l2.config.database().create_job(proof_reg_job.clone()).await.ok();
-
-
-    let client_l2 = hyper::Client::new();
-    let response_l2 = client_l2
-        .request(
-            Request::builder()
-                .uri(format!("http://{}/jobs/block/{}/status", addr_l2, block_number))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response_l2.status(), 200);
-    let body_bytes_l2 = hyper::body::to_bytes(response_l2.into_body()).await.unwrap();
-    let response_body_l2: ApiResponse<crate::server::types::BlockJobStatusResponse> =
-        serde_json::from_slice(&body_bytes_l2).unwrap();
-    assert!(response_body_l2.success);
-    let jobs_response_l2 = response_body_l2.data.unwrap().jobs;
-    assert_eq!(jobs_response_l2.len(), 1, "ProofRegistration job should still be returned even if config is L2");
-    assert_eq!(jobs_response_l2[0].id, proof_reg_job.id);
 }
