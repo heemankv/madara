@@ -110,12 +110,12 @@ impl<T> ApiResponse<T> {
 ///  async fn handle_job() -> JobRouteResult {
 ///     // Success case
 ///     Ok(Json(ApiResponse::success(None)).into_response())
-///     
+///
 ///     // Error case
 ///     Err(JobRouteError::NotFound("123".to_string()))
 /// }
 /// ```
-pub type JobRouteResult<T = ()> = Result<Response, JobRouteError<T>>;
+pub type JobRouteResult<T = ()> = Result<Response<T>, JobRouteError>;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct JobStatusResponseItem {

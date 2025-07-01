@@ -882,26 +882,6 @@ impl DatabaseClient for MongoDbClient {
             }
         }
     }
-}
-
-// Generic utility function to convert Vec<T> to Option<T>
-fn vec_to_single_result<T>(results: Vec<T>, operation_name: &str) -> Result<Option<T>, DatabaseError> {
-    match results.len() {
-        0 => Ok(None),
-        1 => Ok(results.into_iter().next()),
-        n => {
-            tracing::error!("Expected at most 1 result, got {} for operation: {}", n, operation_name);
-            Err(DatabaseError::FailedToSerializeDocument(format!(
-                "Expected at most 1 result, got {} for operation: {}",
-                n, operation_name
-            )))
-        }
-    }
-}
-
-#[async_trait]
-impl DatabaseClient for MongoDbClient {
-    // ... (existing methods)
 
     #[tracing::instrument(skip(self), fields(function_type = "db_call"), ret, err)]
     async fn get_jobs_by_block_number(&self, block_number: u64) -> Result<Vec<JobItem>, DatabaseError> {
@@ -939,12 +919,32 @@ impl DatabaseClient for MongoDbClient {
         let cursor2 = job_collection.find(query2, None).await?;
         results.extend(cursor2.try_collect::<Vec<JobItem>>().await?);
 
-        tracing::debug!(block_number = block_number, count = results.len(), category = "db_call", "Fetched jobs by block number");
+        tracing::debug!(
+            block_number = block_number,
+            count = results.len(),
+            category = "db_call",
+            "Fetched jobs by block number"
+        );
         let attributes = [KeyValue::new("db_operation_name", "get_jobs_by_block_number")];
         let duration = start.elapsed();
         ORCHESTRATOR_METRICS.db_calls_response_time.record(duration.as_secs_f64(), &attributes);
 
         Ok(results)
+    }
+}
+
+// Generic utility function to convert Vec<T> to Option<T>
+fn vec_to_single_result<T>(results: Vec<T>, operation_name: &str) -> Result<Option<T>, DatabaseError> {
+    match results.len() {
+        0 => Ok(None),
+        1 => Ok(results.into_iter().next()),
+        n => {
+            tracing::error!("Expected at most 1 result, got {} for operation: {}", n, operation_name);
+            Err(DatabaseError::FailedToSerializeDocument(format!(
+                "Expected at most 1 result, got {} for operation: {}",
+                n, operation_name
+            )))
+        }
     }
 }
 

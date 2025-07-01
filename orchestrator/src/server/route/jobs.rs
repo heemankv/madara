@@ -9,14 +9,11 @@ use tracing::{error, info, instrument};
 use uuid::Uuid;
 
 use super::super::error::JobRouteError;
-use super::super::error::JobRouteError;
-use super::super::types::{ApiResponse, BlockJobStatusResponse, JobId, JobStatusResponseItem, JobRouteResult};
-use crate::core::client::database::DatabaseClient;
-use crate::core::config::{Config, LayerType};
-use crate::types::jobs::types::JobType;
+use super::super::types::{ApiResponse, BlockJobStatusResponse, JobId, JobRouteResult, JobStatusResponseItem};
+use crate::core::config::Config;
+use crate::utils::metrics::ORCHESTRATOR_METRICS;
 use crate::worker::event_handler::service::JobHandlerService;
 use crate::worker::service::JobService;
-use crate::{utils::metrics::ORCHESTRATOR_METRICS};
 
 /// Handles HTTP requests to process a job.
 ///
@@ -177,16 +174,12 @@ async fn handle_get_job_status_by_block_request(
     Path(block_number): Path<u64>,
     State(config): State<Arc<Config>>,
 ) -> JobRouteResult<BlockJobStatusResponse> {
-    match config.database_client().get_jobs_by_block_number(block_number).await {
+    match config.database().get_jobs_by_block_number(block_number).await {
         Ok(jobs) => {
             let mut job_status_items = Vec::new();
             for job in jobs {
                 // ProofRegistration is now always included if found
-                job_status_items.push(JobStatusResponseItem {
-                    job_type: job.job_type,
-                    id: job.id,
-                    status: job.status,
-                });
+                job_status_items.push(JobStatusResponseItem { job_type: job.job_type, id: job.id, status: job.status });
             }
             info!(count = job_status_items.len(), "Successfully fetched job statuses for block");
             Ok(Json(ApiResponse::success_with_data(
