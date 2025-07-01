@@ -56,6 +56,27 @@ pub struct ApiResponse<T = ()> {
     pub message: Option<String>,
 }
 
+impl ApiResponse<()> {
+    /// Creates an error response with the specified message.
+    ///
+    /// # Arguments
+    /// * `message` - The error message to include in the response
+    ///
+    /// # Returns
+    /// Returns an `ApiResponse` with `success` set to `false` and the provided message.
+    ///
+    /// # Examples
+    /// ```
+    /// use orchestrator::server::types::ApiResponse;
+    /// let response = ApiResponse::error("Operation failed".to_string());
+    /// assert_eq!(response.success, false);
+    /// assert_eq!(response.message, Some("Operation failed".to_string()));
+    /// ```
+    pub fn error(message: String) -> Self {
+        Self { success: false, data: None, message: Some(message) }
+    }
+}
+
 impl<T> ApiResponse<T> {
     /// Creates a successful response with optional data and message.
     pub fn success_with_data(data: T, message: Option<String>) -> Self {
@@ -75,25 +96,6 @@ impl<T> ApiResponse<T> {
     /// ```
     pub fn success(message: Option<String>) -> Self {
         Self { success: true, data: None, message }
-    }
-
-    /// Creates an error response with the specified message.
-    ///
-    /// # Arguments
-    /// * `message` - The error message to include in the response
-    ///
-    /// # Returns
-    /// Returns an `ApiResponse` with `success` set to `false` and the provided message.
-    ///
-    /// # Examples
-    /// ```
-    /// use orchestrator::server::types::ApiResponse;
-    /// let response = ApiResponse::error("Operation failed".to_string());
-    /// assert_eq!(response.success, false);
-    /// assert_eq!(response.message, Some("Operation failed".to_string()));
-    /// ```
-    pub fn error(message: String) -> Self {
-        Self { success: false, data: None, message: Some(message) }
     }
 }
 
