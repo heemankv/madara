@@ -302,20 +302,17 @@ async fn test_get_job_status_by_block_number_not_found(#[future] setup_trigger: 
 
 #[tokio::test]
 #[rstest]
-async fn test_get_job_status_by_block_number_l3_proof_registration(
+async fn test_get_job_status_by_block_number_proof_registration_always_returned(
     #[future] setup_trigger: (SocketAddr, Arc<Config>),
 ) {
-    let (addr, mut config_arc) = setup_trigger.await;
+    let (addr, config) = setup_trigger.await;
     let block_number = 789;
 
-    // Modify config to be L3
-    let mut config_writable = Arc::make_mut(&mut config_arc);
-    config_writable.layer_config =
-        Some(crate::core::config::LayerConfig { layer_type: crate::core::config::LayerType::L3, ..Default::default() });
+    // Create a ProofRegistration job
+    let proof_reg_job = build_job_item(JobType::ProofRegistration, JobStatus::Completed, block_number);
+    config.database().create_job(proof_reg_job.clone()).await.unwrap();
 
-    let proof_reg_job_l3 = build_job_item(JobType::ProofRegistration, JobStatus::Completed, block_number);
-    config_arc.database().create_job(proof_reg_job_l3.clone()).await.unwrap();
-
+    // Query for the job
     let client = hyper::Client::new();
     let response = client
         .request(
@@ -326,58 +323,50 @@ async fn test_get_job_status_by_block_number_l3_proof_registration(
         )
         .await
         .unwrap();
+
+    // Assert that the job is returned
     assert_eq!(response.status(), 200);
     let body_bytes = hyper::body::to_bytes(response.into_body()).await.unwrap();
     let response_body: ApiResponse<crate::server::types::BlockJobStatusResponse> =
         serde_json::from_slice(&body_bytes).unwrap();
     assert!(response_body.success);
     let jobs_response = response_body.data.unwrap().jobs;
-    assert_eq!(jobs_response.len(), 1);
-    assert_eq!(jobs_response[0].id, proof_reg_job_l3.id);
+    assert_eq!(jobs_response.len(), 1, "ProofRegistration job should be returned");
+    assert_eq!(jobs_response[0].id, proof_reg_job.id);
+    assert_eq!(jobs_response[0].job_type, JobType::ProofRegistration);
 
-    // Modify config to be L2
-    let mut config_writable_l2 = Arc::make_mut(&mut config_arc);
-    config_writable_l2.layer_config =
-        Some(crate::core::config::LayerConfig { layer_type: crate::core::config::LayerType::L2, ..Default::default() });
+    // It doesn't matter if the config is L2 or L3, the job should still be returned.
+    // We can simulate this by creating a new config with L2 and running the same query.
+    // The setup_trigger by default doesn't enforce L3, so the above already tests a non-specific layer config.
 
-    // ProofRegistration job for the same block, but now config is L2
-    // We don't need to re-insert the job, just re-query with the updated config context (if State was properly passed)
-    // However, the config is passed as Arc, so the handler will use the config state at the time of the request.
-    // To test this properly, we would ideally need to restart the server with new config or have a mutable config.
-    // For this test, we'll simulate by creating a new job and querying again, assuming the server was "restarted" with L2 config.
-    // OR, rely on the handler logic to correctly use the config passed in its State.
-    // The current setup_trigger provides a new config for each test, so we can create a new one.
-
-    // Let's assume for this part of the test, we'd have a separate fixture or modify the existing one.
-    // For simplicity here, we'll clear the DB and re-insert for an L2 scenario.
-    // This is not ideal as it tests DB interaction more than config propagation in a single server instance.
-    // A better approach would be to have specific test setups for L2 and L3 configs.
-
-    // For now, let's test that if it *were* an L2 config, the job *would not* be returned.
-    // We will rely on the handler logic using the `config` passed in `State`.
-    // We create a new config that is L2.
-    let madara_url = get_env_var_or_panic("MADARA_ORCHESTRATOR_MADARA_RPC_URL");
-    let provider = JsonRpcClient::new(HttpTransport::new(
-        Url::parse(madara_url.as_str().to_string().as_str()).expect("Failed to parse URL"),
+    // Create a new TestConfigBuilder instance for an L2 configuration
+    let madara_url_l2 = get_env_var_or_panic("MADARA_ORCHESTRATOR_MADARA_RPC_URL");
+    let provider_l2 = JsonRpcClient::new(HttpTransport::new(
+        Url::parse(madara_url_l2.as_str().to_string().as_str()).expect("Failed to parse URL"),
     ));
     let services_l2 = TestConfigBuilder::new()
-        .configure_database(ConfigType::Actual) // Use the same DB
+        .configure_database(ConfigType::Actual) // Use the same DB or ensure it's clean and job re-inserted
         .configure_queue_client(ConfigType::Actual)
-        .configure_starknet_client(provider.into())
+        .configure_starknet_client(provider_l2.into())
         .configure_api_server(ConfigType::Actual) // New server instance effectively
         .with_layer_type(crate::core::config::LayerType::L2) // Explicitly L2
         .build()
         .await;
 
-    // Ensure the job still exists in the DB
-    let _ = services_l2.config.database().create_job(proof_reg_job_l3.clone()).await;
+    // Ensure the job exists for this "L2 server instance" context
+    // If the DB is shared and not cleaned, this might lead to duplicate key errors if not handled.
+    // For this test, let's assume `create_job` handles conflicts or we use a fresh DB for `services_l2`.
+    // A simpler way is to just use the `addr_l2` with the existing DB state where `proof_reg_job` is already present.
+    let addr_l2 = services_l2.api_server_address.unwrap();
+     // Ensure the job is in the database for this test context
+    services_l2.config.database().create_job(proof_reg_job.clone()).await.ok();
 
 
     let client_l2 = hyper::Client::new();
     let response_l2 = client_l2
         .request(
             Request::builder()
-                .uri(format!("http://{}/jobs/block/{}/status", services_l2.api_server_address.unwrap(), block_number))
+                .uri(format!("http://{}/jobs/block/{}/status", addr_l2, block_number))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -390,5 +379,6 @@ async fn test_get_job_status_by_block_number_l3_proof_registration(
         serde_json::from_slice(&body_bytes_l2).unwrap();
     assert!(response_body_l2.success);
     let jobs_response_l2 = response_body_l2.data.unwrap().jobs;
-    assert_eq!(jobs_response_l2.len(), 0, "ProofRegistration job should not be returned for L2 config");
+    assert_eq!(jobs_response_l2.len(), 1, "ProofRegistration job should still be returned even if config is L2");
+    assert_eq!(jobs_response_l2[0].id, proof_reg_job.id);
 }

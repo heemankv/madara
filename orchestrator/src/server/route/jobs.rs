@@ -181,16 +181,7 @@ async fn handle_get_job_status_by_block_request(
         Ok(jobs) => {
             let mut job_status_items = Vec::new();
             for job in jobs {
-                // Conditionally include ProofRegistration based on layer type
-                if job.job_type == JobType::ProofRegistration {
-                    if let Some(layer_config) = &config.layer_config {
-                        if layer_config.layer_type != LayerType::L3 {
-                            continue; // Skip if not L3
-                        }
-                    } else {
-                        continue; // Skip if layer_config is None
-                    }
-                }
+                // ProofRegistration is now always included if found
                 job_status_items.push(JobStatusResponseItem {
                     job_type: job.job_type,
                     id: job.id,
