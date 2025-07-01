@@ -120,7 +120,6 @@ pub type JobRouteResult = Result<Response<axum::body::Body>, JobRouteError>;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct JobStatusResponseItem {
     pub job_type: JobType,
-    #[serde(with = "uuid::serde::compact")]
     pub id: Uuid,
     pub status: JobStatus,
 }
