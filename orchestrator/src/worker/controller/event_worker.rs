@@ -35,7 +35,7 @@ impl EventWorker {
     /// # Returns
     /// * `EventSystemResult<EventWorker>` - A Result indicating whether the operation was successful or not
     pub fn new(queue_type: QueueType, config: Arc<Config>) -> EventSystemResult<Self> {
-        info!("Kicking in the Worker to Monitor the Queue {:?}", queue_type);
+        info!("[{}] Starting worker", queue_type);
         let queue_config = QUEUES.get(&queue_type).ok_or(ConsumptionError::QueueNotFound(queue_type.to_string()))?;
         let queue_control = queue_config.queue_control.clone();
         Ok(Self { queue_type, config, queue_control })
@@ -129,7 +129,7 @@ impl EventWorker {
     /// # Errors
     /// * Returns an EventSystemError if the message cannot be handled
     async fn handle_job_queue(&self, queue_message: &JobQueueMessage, job_state: JobState) -> EventSystemResult<()> {
-        info!("Received message: {:?}, state: {:?}", queue_message, job_state);
+        debug!("[{}] Received message for job: {}", self.queue_type, queue_message.id);
         let span = info_span!("job_queue", q = %self.queue_type, id = %queue_message.id);
         let _guard = span.enter();
         match job_state {
@@ -203,10 +203,10 @@ impl EventWorker {
         parsed_message: &ParsedMessage,
     ) -> EventSystemResult<()> {
         if let Err(ref error) = result {
-            let (_error_context, consumption_error) = match parsed_message {
+            let (error_context, consumption_error) = match parsed_message {
                 ParsedMessage::WorkerTrigger(msg) => {
                     let worker = &msg.worker;
-                    tracing::error!("Failed to handle worker trigger {worker:?}. Error: {error:?}");
+                    error!("[{}] Failed to handle worker trigger. Error: {}", worker, error);
                     (
                         format!("Worker {worker:?} handling failed: {error}"),
                         ConsumptionError::FailedToSpawnWorker {
@@ -217,7 +217,7 @@ impl EventWorker {
                 }
                 ParsedMessage::JobQueue(msg) => {
                     let job_id = &msg.id;
-                    tracing::error!("Failed to handle job {job_id:?}. Error: {error:?}");
+                    error!("[{}] Failed to handle job {}. Error: {}", self.queue_type, job_id, error);
                     (
                         format!("Job {job_id:?} handling failed: {error}"),
                         ConsumptionError::FailedToHandleJob { job_id: *job_id, error_msg: error.to_string() },
@@ -255,7 +255,7 @@ impl EventWorker {
         let result = self.handle_message(&parsed_message).await;
         match self.post_processing(result, message, &parsed_message).await {
             Ok(_) => {
-                info!("Message processed successfully");
+                debug!("[{}] Message processed successfully", self.queue_type);
                 Ok(())
             }
             Err(e) => {
@@ -287,7 +287,7 @@ impl EventWorker {
     pub async fn run(&self) -> EventSystemResult<()> {
         let mut tasks = JoinSet::new();
         let max_concurrent_tasks = self.queue_control.max_message_count;
-        info!("Starting worker with concurrency limit: {}", max_concurrent_tasks);
+        info!("[{}] Starting worker with concurrency limit: {}", self.queue_type, max_concurrent_tasks);
 
         loop {
             if tasks.len() < max_concurrent_tasks {

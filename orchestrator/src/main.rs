@@ -25,7 +25,7 @@ async fn main() {
 
     match &cli.command {
         Commands::Run { run_command } => {
-            info!("Executing run command with args: {:?}", run_command);
+            debug!("Executing run command with args: {:?}", run_command);
             match run_orchestrator(run_command).await {
                 Ok(_) => {
                     info!("Orchestrator service started successfully");
@@ -41,7 +41,7 @@ async fn main() {
             }
         }
         Commands::Setup { setup_command } => {
-            info!("Executing setup command with args: {:?}", setup_command);
+            debug!("Executing setup command with args: {:?}", setup_command);
             match setup_orchestrator(setup_command).await {
                 Ok(_) => {
                     info!("Orchestrator setup completed successfully");

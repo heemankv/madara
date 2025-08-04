@@ -48,18 +48,11 @@ impl JobService {
     ) -> Result<(), JobError> {
         let message = JobQueueMessage { id };
         config.queue().send_message(queue.clone(), serde_json::to_string(&message)?, delay).await?;
-        tracing::info!(
-            log_type = "JobQueue",
-            category = "add_job_to_queue",
-            function_type = "add_job_to_queue",
-            "Added job with id {:?} to {:?} queue",
-            id,
-            queue
-        );
+        tracing::debug!("[{}] Added job with id {} to queue", queue, id);
         Ok(())
     }
     pub async fn add_job_to_process_queue(id: Uuid, job_type: &JobType, config: Arc<Config>) -> Result<(), JobError> {
-        tracing::info!("Adding job with id {:?} to processing queue", id);
+        tracing::debug!("[{}] Adding job with id {} to processing queue", job_type, id);
         Self::add_job_to_queue(config, id, job_type.process_queue_name(), None).await
     }
 
@@ -69,7 +62,7 @@ impl JobService {
         job_type: &JobType,
         delay: Option<Duration>,
     ) -> Result<(), JobError> {
-        tracing::info!("Adding job with id {:?} to Verification queue", id);
+        tracing::debug!("[{}] Adding job with id {} to verification queue", job_type, id);
         Self::add_job_to_queue(config, id, job_type.verify_queue_name(), delay).await
     }
 
@@ -84,7 +77,7 @@ impl JobService {
     ///
     /// # State Transitions
     /// * Any valid state -> PendingProcess
-    #[tracing::instrument(skip(config), fields(category = "general"), ret, err)]
+    #[tracing::instrument(skip(config), fields(category = "general"), err)]
     pub async fn queue_job_for_processing(id: Uuid, config: Arc<Config>) -> Result<(), JobError> {
         let job = Self::get_job(id, config.clone()).await?;
 
@@ -106,7 +99,7 @@ impl JobService {
     /// # Notes
     /// * Resets verification attempt count to 0
     /// * Sets appropriate delay for verification polling
-    #[tracing::instrument(skip(config), fields(category = "general"), ret, err)]
+    #[tracing::instrument(skip(config), fields(category = "general"), err)]
     pub async fn queue_job_for_verification(id: Uuid, config: Arc<Config>) -> Result<(), JobError> {
         let mut job = Self::get_job(id, config.clone()).await?;
         let job_handler = factory::get_job_handler(&job.job_type).await;
@@ -187,13 +180,7 @@ impl JobService {
             .await
         {
             Ok(_) => {
-                tracing::info!(
-                    log_type = "completed",
-                    category = "general",
-                    function_type = "handle_job_failure",
-                    block_no = %internal_id,
-                    "General handle job failure completed for block"
-                );
+                tracing::info!("[{}] Job failed for block {}", job.job_type, internal_id);
                 ORCHESTRATOR_METRICS
                     .failed_jobs
                     .add(1.0, &[KeyValue::new("operation_job_type", format!("{:?}", job.job_type))]);

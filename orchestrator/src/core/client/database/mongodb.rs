@@ -285,7 +285,7 @@ impl DatabaseClient for MongoDbClient {
     /// * `job` - The job to be created
     /// # Returns
     /// * `Result<JobItem, DatabaseError>` - A Result indicating whether the operation was successful or not
-    #[tracing::instrument(skip(self), fields(function_type = "db_call"), ret, err)]
+    #[tracing::instrument(skip(self, job), fields(function_type = "db_call"), err)]
     async fn create_job(&self, job: JobItem) -> Result<JobItem, DatabaseError> {
         let start = Instant::now();
         let options = UpdateOptions::builder().upsert(true).build();
@@ -321,7 +321,7 @@ impl DatabaseClient for MongoDbClient {
         }
     }
 
-    #[tracing::instrument(skip(self), fields(function_type = "db_call"), ret, err)]
+    #[tracing::instrument(skip(self), fields(function_type = "db_call"), err)]
     async fn get_job_by_id(&self, id: Uuid) -> Result<Option<JobItem>, DatabaseError> {
         let start = Instant::now();
         let filter = doc! {
@@ -334,7 +334,7 @@ impl DatabaseClient for MongoDbClient {
         Ok(self.get_job_collection().find_one(filter, None).await?)
     }
 
-    #[tracing::instrument(skip(self), fields(function_type = "db_call"), ret, err)]
+    #[tracing::instrument(skip(self), fields(function_type = "db_call"), err)]
     async fn get_job_by_internal_id_and_type(
         &self,
         internal_id: &str,
@@ -352,7 +352,7 @@ impl DatabaseClient for MongoDbClient {
         Ok(self.get_job_collection().find_one(filter, None).await?)
     }
 
-    #[tracing::instrument(skip(self), fields(function_type = "db_call"), ret, err)]
+    #[tracing::instrument(skip(self, current_job, update), fields(function_type = "db_call"), err)]
     async fn update_job(&self, current_job: &JobItem, update: JobItemUpdates) -> Result<JobItem, DatabaseError> {
         let start = Instant::now();
         // Filters to search for the job
@@ -401,7 +401,7 @@ impl DatabaseClient for MongoDbClient {
         }
     }
 
-    #[tracing::instrument(skip(self), fields(function_type = "db_call"), ret, err)]
+    #[tracing::instrument(skip(self), fields(function_type = "db_call"), err)]
     async fn get_latest_job_by_type(&self, job_type: JobType) -> Result<Option<JobItem>, DatabaseError> {
         let start = Instant::now();
         let pipeline = vec![
@@ -462,7 +462,7 @@ impl DatabaseClient for MongoDbClient {
     /// job_a_status : Completed
     ///
     /// job_b_type : ProofCreation
-    #[tracing::instrument(skip(self), fields(function_type = "db_call"), ret, err)]
+    #[tracing::instrument(skip(self), fields(function_type = "db_call"), err)]
     async fn get_jobs_without_successor(
         &self,
         job_a_type: JobType,
@@ -530,7 +530,7 @@ impl DatabaseClient for MongoDbClient {
         Ok(result)
     }
 
-    #[tracing::instrument(skip(self), fields(function_type = "db_call"), ret, err)]
+    #[tracing::instrument(skip(self), fields(function_type = "db_call"), err)]
     async fn get_jobs_after_internal_id_by_job_type(
         &self,
         job_type: JobType,
@@ -556,7 +556,7 @@ impl DatabaseClient for MongoDbClient {
         Ok(jobs)
     }
 
-    #[tracing::instrument(skip(self), fields(function_type = "db_call"), ret, err)]
+    #[tracing::instrument(skip(self), fields(function_type = "db_call"), err)]
     async fn get_jobs_by_types_and_statuses(
         &self,
         job_type: Vec<JobType>,
@@ -602,7 +602,7 @@ impl DatabaseClient for MongoDbClient {
     /// job_type : SnosRun
     /// lower_cap : 2000
     /// upper_cap : 70000
-    #[tracing::instrument(skip(self), fields(function_type = "db_call"), ret, err)]
+    #[tracing::instrument(skip(self), fields(function_type = "db_call"), err)]
     async fn get_missing_block_numbers_by_type_and_caps(
         &self,
         job_type: JobType,
@@ -722,7 +722,7 @@ impl DatabaseClient for MongoDbClient {
         Ok(block_numbers)
     }
 
-    #[tracing::instrument(skip(self), fields(function_type = "db_call"), ret, err)]
+    #[tracing::instrument(skip(self), fields(function_type = "db_call"), err)]
     async fn get_latest_job_by_type_and_status(
         &self,
         job_type: JobType,
@@ -883,7 +883,7 @@ impl DatabaseClient for MongoDbClient {
         }
     }
 
-    #[tracing::instrument(skip(self), fields(function_type = "db_call"), ret, err)]
+    #[tracing::instrument(skip(self), fields(function_type = "db_call"), err)]
     async fn get_jobs_by_type_and_statuses(
         &self,
         job_type: &JobType,
@@ -915,7 +915,7 @@ impl DatabaseClient for MongoDbClient {
         Ok(jobs)
     }
 
-    #[tracing::instrument(skip(self), fields(function_type = "db_call"), ret, err)]
+    #[tracing::instrument(skip(self), fields(function_type = "db_call"), err)]
     async fn get_jobs_by_block_number(&self, block_number: u64) -> Result<Vec<JobItem>, DatabaseError> {
         let start = Instant::now();
         let block_number_i64 = block_number as i64; // MongoDB typically handles numbers as i32 or i64
@@ -964,7 +964,7 @@ impl DatabaseClient for MongoDbClient {
         Ok(results)
     }
 
-    #[tracing::instrument(skip(self), fields(function_type = "db_call"), ret, err)]
+    #[tracing::instrument(skip(self), fields(function_type = "db_call"), err)]
     async fn get_orphaned_jobs(&self, job_type: &JobType, timeout_seconds: u64) -> Result<Vec<JobItem>, DatabaseError> {
         let start = Instant::now();
 
